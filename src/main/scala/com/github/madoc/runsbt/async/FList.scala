@@ -1,6 +1,7 @@
 package com.github.madoc.runsbt.async
 
-import scala.concurrent.{Future, Promise, SyncVar}
+import scala.concurrent.{ExecutionContext, Future, Promise, SyncVar}
+import scala.util.{Failure, Success}
 
 /** Similar to a `Stream` in that consecutive elements are provided in a delayed fashion, but unlike `Stream`, this
   * type provides following elements as a `Future` of the remaining elements. Only the minimum set of methods
@@ -10,6 +11,20 @@ sealed trait FList[+A]
 object FList {
   object Nil extends FList[Nothing]
   sealed case class Cons[A](head:A, tail:Future[FList[A]]) extends FList[A]
+
+  def completion[A](future:Future[FList[A]])(implicit ec:ExecutionContext):Future[Unit] = {
+    val promise = Promise[Unit]()
+    def recurse(fut:Future[FList[A]]) {fut onComplete {
+      case Failure(_) | Success(Nil) ⇒ promise success Unit
+      case Success(Cons(_,tail)) ⇒ recurse(tail)
+    }}
+    recurse(future)
+    promise future
+  }
+  def foreach[A,B](future:Future[FList[A]])(f:A⇒B)(implicit ec:ExecutionContext) {future onComplete {
+    case Failure(_) | Success(Nil) ⇒
+    case Success(Cons(head, tail)) ⇒ f(head); foreach(tail)(f)
+  }}
 
   trait Receiver[A] {
     def receive(a:A)

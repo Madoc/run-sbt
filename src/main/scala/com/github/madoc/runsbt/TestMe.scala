@@ -1,29 +1,27 @@
 package com.github.madoc.runsbt
 
+import java.util.concurrent.Executors
+
 import com.github.madoc.runsbt.async.FList
 import com.github.madoc.runsbt.config.ExecutableConfig.CommandLineExecutableConfig
 import com.github.madoc.runsbt.config.SBTConfig
 import com.github.madoc.runsbt.running.SBTCommand
 
+import scala.concurrent.{Await, ExecutionContext}
 import scala.concurrent.duration.Duration
-import scala.concurrent.{Await, Future, Promise}
-import scala.util.{Failure, Success}
 
 object TestMe extends App {
-  import scala.concurrent.ExecutionContext.Implicits.global
+  // TODO tasks get submitted even after everything finished
+  val threadPool = Executors.newFixedThreadPool(10)
+  implicit val executionContext = ExecutionContext.fromExecutorService(threadPool)
+
   val proc = RunSBT(SBTConfig(CommandLineExecutableConfig("/Users/madoc/bin/sbt")))(SBTCommand.FreeForm("-h"))
   proc.exitValue.onComplete({ev ⇒ println(s"***** EXIT VALUE $ev")})
-  printFList(proc.logLines)
 
-  val finished = Promise[Unit]()
+  FList.foreach(proc logLines)(println)
 
-  def printFList(f:Future[FList[String]]) {f.onComplete({
-    case Success(list) ⇒ list match {
-      case FList.Nil ⇒ println("***** END OF LINES"); finished.success(Unit)
-      case FList.Cons(head, tail) ⇒ println(s"### $head"); printFList(tail)
-    }
-    case Failure(exception) ⇒ finished.success(Unit); throw exception
-  })}
-
-  Await.ready(finished future, Duration.Inf)
+  Await.ready(FList completion (proc logLines), Duration.Inf)
+  Await.ready(proc exitValue, Duration.Inf)
+  //synchronized(wait(3000))
+  threadPool.shutdown()
 }
