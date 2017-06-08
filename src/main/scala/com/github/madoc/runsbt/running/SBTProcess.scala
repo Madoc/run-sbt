@@ -1,27 +1,34 @@
 package com.github.madoc.runsbt.running
 
-import com.github.madoc.runsbt.async.FList
+import java.util.concurrent.{BlockingQueue, LinkedBlockingQueue}
 
-import scala.concurrent.{ExecutionContext, Future}
 import scala.sys.process._
 
 trait SBTProcess {
   def cancel()
-  def exitValue:Future[Int]
-  def logLines:Future[FList[String]]
+  def exitValue:Int
+  def outputLines:Stream[String]
 }
 object SBTProcess {
-  case class BasedOnProcessBuilder(builder:ProcessBuilder)(implicit ec:ExecutionContext) extends SBTProcess {
-    private val (_logLines, logLinesReceiver) = FList.newPair[String]()
-    private val process:Process = builder.run(ProcessLogger(logLinesReceiver.receive _))
+  case class BasedOnProcessBuilder(builder:ProcessBuilder) extends SBTProcess {
+    def exitValue = process exitValue
+    def cancel() {process destroy(); buffer put EOS}
+    lazy val outputLines:Stream[String] = nextLogLine()
 
-    val exitValue:Future[Int] = Future {
-      val ev = process exitValue()
-      logLinesReceiver close()
-      ev
+    private sealed trait Element
+    private sealed case class Line(string:String) extends Element
+    private object EOS extends Element
+
+    private val buffer:BlockingQueue[Element] = new LinkedBlockingQueue[Element]()
+    private val process:Process = builder.run(ProcessLogger(str ⇒ buffer put Line(str)))
+
+    private def nextLogLine():Stream[String] = buffer take match {
+      case EOS ⇒ buffer put EOS; Stream.empty
+      case Line(string) ⇒ Stream cons (string, nextLogLine())
     }
 
-    def cancel() {process destroy(); logLinesReceiver close()}
-    def logLines:Future[FList[String]] = _logLines
+    locally {new Thread() {
+      override def run() {process.exitValue(); buffer put EOS}
+    }.start()}
   }
 }
