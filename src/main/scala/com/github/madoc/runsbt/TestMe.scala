@@ -6,7 +6,8 @@ import com.github.madoc.runsbt.running.SBTCommand
 
 object TestMe extends App {
   def runOnce() {
-    val proc = RunSBT(SBTConfig(CommandLineExecutableConfig("/Users/madoc/bin/sbt")))(SBTCommand.FreeForm("-h"))
+    val runSBT = RunSBT(SBTConfig(CommandLineExecutableConfig("/Users/madoc/bin/sbt")))
+    val proc = runSBT(SBTCommand.FreeForm("-h"))
     proc.outputLines foreach println
   }
 
