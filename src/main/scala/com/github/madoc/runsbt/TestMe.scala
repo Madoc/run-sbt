@@ -4,7 +4,7 @@ import java.io.File
 
 import com.github.madoc.runsbt.config.ExecutableConfig.CommandLineExecutableConfig
 import com.github.madoc.runsbt.config.SBTConfig
-import com.github.madoc.runsbt.events.{SBTEvent, SBTEventParser}
+import com.github.madoc.runsbt.events.SBTEventParser
 import com.github.madoc.runsbt.running.SBTCommand.CompileCommand
 
 object TestMe extends App {
