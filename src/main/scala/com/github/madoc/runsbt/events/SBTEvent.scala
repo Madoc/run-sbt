@@ -9,6 +9,7 @@ object SBTEvent {
   sealed case class Resolving(dependency:String) extends SBTEvent
   sealed case class SetProject(projectName:String, buildPath:String) extends SBTEvent
   sealed case class UnrecognizedEvent(line:String) extends SBTEvent
+  sealed case class UnresolvedDependencies(dependencies:Seq[String], stackTrace:Seq[String]) extends SBTEvent
   sealed case class Updating(pathDescription:String) extends SBTEvent
 
   case class ModuleNotFound_Tried(scope:String, uris:Seq[String])
