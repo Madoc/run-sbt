@@ -24,8 +24,10 @@ object SBTProcess {
 
     private def nextLogLine():Stream[String] = buffer take match {
       case EOS ⇒ buffer put EOS; Stream.empty
-      case Line(string) ⇒ Stream cons (string, nextLogLine())
+      case Line(string) ⇒ Stream cons (cleanUp(string), nextLogLine())
     }
+
+    private def cleanUp(str:String):String = str replaceAll ("\\e\\[[\\d;]*[^\\d;]", "")
 
     locally {new Thread() {
       override def run() {process.exitValue(); buffer put EOS}
