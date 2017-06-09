@@ -16,12 +16,15 @@ object SBTEvent {
   }
   sealed case class Packaging(packagePaths:Seq[String], writtenPaths:Seq[String], scalaAPIPaths:Seq[String],
     moduleDeliveries:Seq[ModuleDeliverySpec], publishings:Seq[ModuleDeliveryPublishing], deliveryIvyPaths:Seq[String],
-    featureWarningCount:Int, warningCount:Int, documentableTemplateCount:Int) extends SBTEvent
+    featureWarningCount:Int, warningCount:Int, documentableTemplateCount:Int, missingMainClass:Boolean) extends SBTEvent
   sealed case class Resolving(dependency:String) extends SBTEvent
   sealed case class SetProject(projectName:String, buildPath:String) extends SBTEvent
   sealed case class StageError(stage:String, errorMessage:String) extends SBTEvent {
     override def isError = true
   }
+  sealed case class UnitTestEvent(testOutput:Seq[String], runDuration:String, numberOfTestsRun:Int, testsSucceeded:Int,
+    testsFailed:Int, testsCanceled:Int, testsIgnored:Int, testsPending:Int, suitesCompletedCount:Int,
+    suitesAbortedCount:Int=0) extends SBTEvent
   sealed case class UnrecognizedEvent(line:String) extends SBTEvent
   sealed case class UnresolvedDependencies(dependencies:Seq[String], stackTrace:Seq[String]) extends SBTEvent {
     override def isError = true

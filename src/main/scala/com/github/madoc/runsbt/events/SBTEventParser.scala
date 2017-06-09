@@ -3,12 +3,17 @@ package com.github.madoc.runsbt.events
 import com.github.madoc.runsbt.events.SBTEvent._
 
 object SBTEventParser extends (Stream[String]⇒Stream[SBTEvent]) {
-  def apply(in:Stream[String]):Stream[SBTEvent] = defaultState(in filterNot ignoredLine)
+  def apply(in:Stream[String]):Stream[SBTEvent] =
+    SBTTestSuiteExtractor(defaultState(in filterNot ignoredLine map cleanUpLine))
 
   private val justColons = """^\[\w+\]\s*:+\s*$""".r.pattern
   private val justLogLevel = """^\[\w+\]\s*$""".r.pattern
   private def ignoredLine(line:String):Boolean =
     line.trim.isEmpty || justColons.matcher(line).matches() || justLogLevel.matcher(line).matches()
+  private val malformedLineStart = """^M\[\w+\].*$""".r.pattern
+  private def cleanUpLine(line:String):String =
+    if(malformedLineStart.matcher(line).matches()) line drop 2
+    else line
 
   private object Patterns {
     val Pcompiling = """\[info\] Compiling (.+) (.+) source(?:s)? to (.+)...""".r
@@ -28,6 +33,7 @@ object SBTEventParser extends (Stream[String]⇒Stream[SBTEvent]) {
     val Ppackaging_documentableTemplates = """model contains (.*) documentable template(?:s)?""".r
     val Ppackaging_documentationSuccessful = """\[info\] Main Scala API documentation successful.""".r
     val Ppackaging_featureWarnings = """\[warn\] there (?:were|was) (.*) feature warning(?:s)?; re-run with -feature for details""".r
+    val Ppackaging_noMainClassDetected = """\[warn\]\s+No main class detected""".r
     val Ppackaging_published = """\[info\]\s+published (.*) to (.*)""".r
     val Ppackaging_warningsFound = """\[warn\] (.*) warning(?:s)? found""".r
     val Ppackaging_wrote = """\[info\] Wrote (.*)""".r
@@ -88,18 +94,18 @@ object SBTEventParser extends (Stream[String]⇒Stream[SBTEvent]) {
     _writtenPaths:Seq[String]=Seq(), _moduleDeliveries:Seq[ModuleDeliverySpec]=Seq(),
     _deliveredIvyPaths:Seq[String]=Seq(), _featureWarningCount:Option[String]=None,
     _documentableTemplateCount:Option[String]=None, _warningCount:Option[String]=None,
-    _publishings:Seq[ModuleDeliveryPublishing]=Seq()):Stream[SBTEvent] = {
+    _publishings:Seq[ModuleDeliveryPublishing]=Seq(), _missingMainClass:Boolean=false):Stream[SBTEvent] = {
 
     def recurse(in2:Stream[String], packagePaths:Seq[String]=_packagePaths, scalaAPIPaths:Seq[String]=_scalaAPIPaths,
       writtenPaths:Seq[String]=_writtenPaths, moduleDeliveries:Seq[ModuleDeliverySpec]=_moduleDeliveries,
       deliveredIvyPaths:Seq[String]=_deliveredIvyPaths, featureWarningCount:Option[String]=_featureWarningCount,
       documentableTemplateCount:Option[String]=_documentableTemplateCount, warningCount:Option[String]=_warningCount,
-      publishings:Seq[ModuleDeliveryPublishing]=_publishings):Stream[SBTEvent] =
+      publishings:Seq[ModuleDeliveryPublishing]=_publishings, missingMainClass:Boolean=_missingMainClass):Stream[SBTEvent] =
 
       packagingState(in2, _packagePaths=packagePaths, _scalaAPIPaths=scalaAPIPaths, _writtenPaths=writtenPaths,
         _moduleDeliveries=moduleDeliveries, _deliveredIvyPaths=deliveredIvyPaths,
         _featureWarningCount=featureWarningCount, _documentableTemplateCount=documentableTemplateCount,
-        _warningCount=warningCount, _publishings=publishings)
+        _warningCount=warningCount, _publishings=publishings, _missingMainClass=missingMainClass)
 
     in match {
       case Ppackaging(path) #:: in2 ⇒ recurse(in2, packagePaths = _packagePaths :+ path)
@@ -115,6 +121,7 @@ object SBTEventParser extends (Stream[String]⇒Stream[SBTEvent]) {
       case Ppackaging_warningsFound(num) #:: in2 ⇒ recurse(in2, warningCount=Some(num))
       case Ppackaging_documentationSuccessful() #:: in2 ⇒ recurse(in2)
       case Ppackaging_published(what, where) #:: in2 ⇒ recurse(in2, publishings = _publishings:+ModuleDeliveryPublishing(what,where))
+      case Ppackaging_noMainClassDetected() #:: in2 ⇒ recurse(in2, missingMainClass = true)
       case _ ⇒ Packaging(
         packagePaths = _packagePaths,
         writtenPaths = _writtenPaths,
@@ -124,7 +131,8 @@ object SBTEventParser extends (Stream[String]⇒Stream[SBTEvent]) {
         deliveryIvyPaths = _deliveredIvyPaths,
         featureWarningCount = _featureWarningCount map parseNumber getOrElse 0,
         warningCount = _warningCount map parseNumber getOrElse 0,
-        documentableTemplateCount = _documentableTemplateCount map parseNumber getOrElse 0
+        documentableTemplateCount = _documentableTemplateCount map parseNumber getOrElse 0,
+        missingMainClass = _missingMainClass
       ) #:: defaultState(in)
     }
   }
