@@ -11,7 +11,10 @@ object SBTEventParser extends (Stream[String]⇒Stream[SBTEvent]) {
     line.trim.isEmpty || justColons.matcher(line).matches() || justLogLevel.matcher(line).matches()
 
   private object Patterns {
+    val PcompletionLine = """\[(\w+)\] Total time: (.+), completed (.+)""".r
     val PdoneUpdating = """\[info\] Done updating.""".r
+    val Pexception_firstLine = """(.+: .+)""".r
+    val Pexception_nextLines = """\s+(at .+)""".r
     val PloadingPluginsFrom = """\[info\] Loading global plugins from (.*)""".r
     val PloadingProjectDefinition = """\[info\] Loading project definition from (.*)""".r
     val Presolving = """\[info\] Resolving (.*) ...""".r
@@ -19,17 +22,24 @@ object SBTEventParser extends (Stream[String]⇒Stream[SBTEvent]) {
     val Presolving_moduleNotFound_tried = """\[warn\] ==== (.*): tried""".r
     val Presolving_moduleNotFound_tried_uri = """\[warn\]   (.*)""".r
     val PsetProject = """\[info\] Set current project to (.*) \(in build (.*)\)""".r
+    val PstageError = """\[error\] \(([^)]+)\) (.+)""".r
     val PunresolvedDependencies = """\[warn\]\s+::\s+UNRESOLVED DEPENDENCIES\s+::""".r
+    val PunresolvedDependencies_ignore1 = """\[warn\]\s+Note: Unresolved dependencies path:""".r
+    val PunresolvedDependencies_ignore2 = """\[warn\]\s+.+ \(.+\)""".r
+    val PunresolvedDependencies_ignore3 = """\[warn\]\s+\+- .*""".r
+    val PunresolvedDependencies_notFound = """\[warn\]\s+:: (.*): not found""".r
     val Pupdating = """\[info\] Updating (.*)...""".r
   }
   import Patterns._
 
   private def defaultState(in:Stream[String]):Stream[SBTEvent] = in match {
+    case PcompletionLine(status, duration, completionTime) #:: in2 ⇒ CompletionLine(status, duration, completionTime) #:: defaultState(in2)
     case PdoneUpdating() #:: in2 ⇒ DoneUpdating #:: defaultState(in2)
     case PloadingPluginsFrom(pluginPath) #:: in2 ⇒ LoadingPlugins(pluginPath) #:: defaultState(in2)
     case PloadingProjectDefinition(path) #:: in2 ⇒ LoadingProjectDefinition(path) #:: defaultState(in2)
     case Presolving(dependency) #:: in2 ⇒ resolvingState(dependency, in2)
     case PsetProject(projectName, buildPath) #:: in2 ⇒ SetProject(projectName, buildPath) #:: defaultState(in2)
+    case PstageError(stage, errorMessage) #:: in2 ⇒ StageError(stage, errorMessage) #:: defaultState(in2)
     case PunresolvedDependencies() #:: in2 ⇒ unresolvedDependenciesState(in2)
     case Pupdating(pathDesc) #:: in2 ⇒ Updating(pathDesc) #:: defaultState(in2)
     case line #:: in2 ⇒ UnrecognizedEvent(line) #:: defaultState(in2)
@@ -59,8 +69,31 @@ object SBTEventParser extends (Stream[String]⇒Stream[SBTEvent]) {
     }
   }
 
-  private def unresolvedDependenciesState(in:Stream[String]):Stream[SBTEvent] = {
-    // TODO
-    ???
+  private def unresolvedDependenciesState(in:Stream[String], dependencies:Seq[String]=Seq()):Stream[SBTEvent] = {
+    def notFoundSubState(dependency:String, in:Stream[String]):Stream[SBTEvent] = in match {
+      case PunresolvedDependencies_ignore1() #:: in2 ⇒ notFoundSubState(dependency, in2)
+      case PunresolvedDependencies_ignore2() #:: in2 ⇒ notFoundSubState(dependency, in2)
+      case PunresolvedDependencies_ignore3() #:: in2 ⇒ notFoundSubState(dependency, in2)
+      case _ ⇒ unresolvedDependenciesState(in, dependencies :+ dependency)
+    }
+
+    in match {
+      case PunresolvedDependencies_notFound(dependency) #:: in2 ⇒ notFoundSubState(dependency, in2)
+      case _ ⇒
+        val (stackTrace, in2) = extractStackTrace(in)
+        UnresolvedDependencies(dependencies, stackTrace) #:: defaultState(in2)
+    }
+  }
+
+  private def extractStackTrace(in:Stream[String]):(Seq[String],Stream[String]) = {
+    def extractAtLinesSubState(in:Stream[String], stackTrace:Seq[String]):(Seq[String],Stream[String]) = in match {
+      case Pexception_nextLines(line) #:: in2 ⇒ extractAtLinesSubState(in2, stackTrace :+ line)
+      case _ ⇒ (stackTrace, in)
+    }
+
+    in match {
+      case Pexception_firstLine(fst) #:: in2 ⇒ extractAtLinesSubState(in2, Seq(fst))
+      case _ ⇒ (Seq(), in)
+    }
   }
 }
