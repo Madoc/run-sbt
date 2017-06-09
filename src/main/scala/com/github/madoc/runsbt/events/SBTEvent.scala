@@ -14,6 +14,9 @@ object SBTEvent {
   sealed case class ModuleNotFound(module:String, tried:Seq[ModuleNotFound_Tried]) extends SBTEvent {
     override def isError = true
   }
+  sealed case class Packaging(packagePaths:Seq[String], writtenPaths:Seq[String], scalaAPIPaths:Seq[String],
+    moduleDeliveries:Seq[ModuleDeliverySpec], publishings:Seq[ModuleDeliveryPublishing], deliveryIvyPaths:Seq[String],
+    featureWarningCount:Int, warningCount:Int, documentableTemplateCount:Int) extends SBTEvent
   sealed case class Resolving(dependency:String) extends SBTEvent
   sealed case class SetProject(projectName:String, buildPath:String) extends SBTEvent
   sealed case class StageError(stage:String, errorMessage:String) extends SBTEvent {
@@ -25,5 +28,7 @@ object SBTEvent {
   }
   sealed case class Updating(pathDescription:String) extends SBTEvent
 
+  case class ModuleDeliveryPublishing(what:String, targetPath:String)
+  case class ModuleDeliverySpec(module:String, version:String, context:String, timestamp:String)
   case class ModuleNotFound_Tried(scope:String, uris:Seq[String])
 }

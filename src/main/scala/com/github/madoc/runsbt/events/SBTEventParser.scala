@@ -20,6 +20,17 @@ object SBTEventParser extends (Stream[String]⇒Stream[SBTEvent]) {
     val Pexception_nextLines = """\s+(at .+)""".r
     val PloadingPluginsFrom = """\[info\] Loading global plugins from (.*)""".r
     val PloadingProjectDefinition = """\[info\] Loading project definition from (.*)""".r
+    val Ppackaging = """\[info\] Packaging (.*) ...""".r
+    val Ppackaging_apiDocs = """\[info\] Main Scala API documentation to (.*)...""".r
+    val Ppackaging_delivering = """\[info\] :: delivering :: (.*) :: (.*) :: (.*) :: (.*)""".r
+    val Ppackaging_deliveringIvyFile = """\[info\]\s+delivering ivy file to (.*)""".r
+    val Ppackaging_donePackaging = """\[info\] Done packaging.""".r
+    val Ppackaging_documentableTemplates = """model contains (.*) documentable template(?:s)?""".r
+    val Ppackaging_documentationSuccessful = """\[info\] Main Scala API documentation successful.""".r
+    val Ppackaging_featureWarnings = """\[warn\] there (?:were|was) (.*) feature warning(?:s)?; re-run with -feature for details""".r
+    val Ppackaging_published = """\[info\]\s+published (.*) to (.*)""".r
+    val Ppackaging_warningsFound = """\[warn\] (.*) warning(?:s)? found""".r
+    val Ppackaging_wrote = """\[info\] Wrote (.*)""".r
     val Presolving = """\[info\] Resolving (.*) ...""".r
     val Presolving_moduleNotFound = """\[warn\] 	module not found: (.*)""".r
     val Presolving_moduleNotFound_tried = """\[warn\] ==== (.*): tried""".r
@@ -41,6 +52,7 @@ object SBTEventParser extends (Stream[String]⇒Stream[SBTEvent]) {
     case PdoneUpdating() #:: in2 ⇒ DoneUpdating #:: defaultState(in2)
     case PloadingPluginsFrom(pluginPath) #:: in2 ⇒ LoadingPlugins(pluginPath) #:: defaultState(in2)
     case PloadingProjectDefinition(path) #:: in2 ⇒ LoadingProjectDefinition(path) #:: defaultState(in2)
+    case Ppackaging(packagePath) #:: in2 ⇒ packagingState(in2, Seq(packagePath))
     case Presolving(dependency) #:: in2 ⇒ resolvingState(dependency, in2)
     case PsetProject(projectName, buildPath) #:: in2 ⇒ SetProject(projectName, buildPath) #:: defaultState(in2)
     case PstageError(stage, errorMessage) #:: in2 ⇒ StageError(stage, errorMessage) #:: defaultState(in2)
@@ -68,6 +80,51 @@ object SBTEventParser extends (Stream[String]⇒Stream[SBTEvent]) {
         targetDirectory = targetDirectory,
         warningsCount = _numberOfWarnings map parseNumber getOrElse 0,
         featureWarningsCount = _featureWarnings map parseNumber getOrElse 0
+      ) #:: defaultState(in)
+    }
+  }
+
+  private def packagingState(in:Stream[String], _packagePaths:Seq[String], _scalaAPIPaths:Seq[String]=Seq(),
+    _writtenPaths:Seq[String]=Seq(), _moduleDeliveries:Seq[ModuleDeliverySpec]=Seq(),
+    _deliveredIvyPaths:Seq[String]=Seq(), _featureWarningCount:Option[String]=None,
+    _documentableTemplateCount:Option[String]=None, _warningCount:Option[String]=None,
+    _publishings:Seq[ModuleDeliveryPublishing]=Seq()):Stream[SBTEvent] = {
+
+    def recurse(in2:Stream[String], packagePaths:Seq[String]=_packagePaths, scalaAPIPaths:Seq[String]=_scalaAPIPaths,
+      writtenPaths:Seq[String]=_writtenPaths, moduleDeliveries:Seq[ModuleDeliverySpec]=_moduleDeliveries,
+      deliveredIvyPaths:Seq[String]=_deliveredIvyPaths, featureWarningCount:Option[String]=_featureWarningCount,
+      documentableTemplateCount:Option[String]=_documentableTemplateCount, warningCount:Option[String]=_warningCount,
+      publishings:Seq[ModuleDeliveryPublishing]=_publishings):Stream[SBTEvent] =
+
+      packagingState(in2, _packagePaths=packagePaths, _scalaAPIPaths=scalaAPIPaths, _writtenPaths=writtenPaths,
+        _moduleDeliveries=moduleDeliveries, _deliveredIvyPaths=deliveredIvyPaths,
+        _featureWarningCount=featureWarningCount, _documentableTemplateCount=documentableTemplateCount,
+        _warningCount=warningCount, _publishings=publishings)
+
+    in match {
+      case Ppackaging(path) #:: in2 ⇒ recurse(in2, packagePaths = _packagePaths :+ path)
+      case Ppackaging_apiDocs(apiPath) #:: in2 ⇒ recurse(in2, scalaAPIPaths = _scalaAPIPaths :+ apiPath)
+      case Ppackaging_donePackaging() #:: in2 ⇒ recurse(in2)
+      case Ppackaging_wrote(path) #:: in2 ⇒ recurse(in2, writtenPaths = _writtenPaths:+path)
+      case Ppackaging_delivering(module, version, context, timestamp) #:: in2 ⇒
+        recurse(in2, moduleDeliveries = _moduleDeliveries :+
+          ModuleDeliverySpec(module=module, version=version, context=context, timestamp=timestamp))
+      case Ppackaging_deliveringIvyFile(ivyPath) #:: in2 ⇒ recurse(in2, _deliveredIvyPaths :+ ivyPath)
+      case Ppackaging_featureWarnings(num) #:: in2 ⇒ recurse(in2, featureWarningCount=Some(num))
+      case Ppackaging_documentableTemplates(num) #:: in2 ⇒ recurse(in2, documentableTemplateCount=Some(num))
+      case Ppackaging_warningsFound(num) #:: in2 ⇒ recurse(in2, warningCount=Some(num))
+      case Ppackaging_documentationSuccessful() #:: in2 ⇒ recurse(in2)
+      case Ppackaging_published(what, where) #:: in2 ⇒ recurse(in2, publishings = _publishings:+ModuleDeliveryPublishing(what,where))
+      case _ ⇒ Packaging(
+        packagePaths = _packagePaths,
+        writtenPaths = _writtenPaths,
+        scalaAPIPaths = _scalaAPIPaths,
+        moduleDeliveries = _moduleDeliveries,
+        publishings = _publishings,
+        deliveryIvyPaths = _deliveredIvyPaths,
+        featureWarningCount = _featureWarningCount map parseNumber getOrElse 0,
+        warningCount = _warningCount map parseNumber getOrElse 0,
+        documentableTemplateCount = _documentableTemplateCount map parseNumber getOrElse 0
       ) #:: defaultState(in)
     }
   }
