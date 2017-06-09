@@ -4,10 +4,11 @@ sealed trait SBTEvent {
   def isError:Boolean = false
 }
 object SBTEvent {
+  sealed case class Compiling(sourceFileCount:Int, sourceLanguage:String, targetDirectory:String, warningsCount:Int, featureWarningsCount:Int) extends SBTEvent
   sealed case class CompletionLine(status:String, duration:String, completionTime:String) extends SBTEvent {
     override def isError = status == "error"
   }
-  object DoneUpdating extends SBTEvent
+  object DoneUpdating extends SBTEvent {override def toString = "DoneUpdating"}
   sealed case class LoadingPlugins(pluginPath:String) extends SBTEvent
   sealed case class LoadingProjectDefinition(path:String) extends SBTEvent
   sealed case class ModuleNotFound(module:String, tried:Seq[ModuleNotFound_Tried]) extends SBTEvent {

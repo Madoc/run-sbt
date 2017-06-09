@@ -11,6 +11,9 @@ object SBTEventParser extends (Stream[String]⇒Stream[SBTEvent]) {
     line.trim.isEmpty || justColons.matcher(line).matches() || justLogLevel.matcher(line).matches()
 
   private object Patterns {
+    val Pcompiling = """\[info\] Compiling (.+) (.+) source(?:s)? to (.+)...""".r
+    val Pcompiling_featureWarnings = """\[warn\] there (?:were|was) (.*) feature warning(?:s)?; re-run with -feature for details""".r
+    val Pcompiling_warningsFound = """\[warn\] (.*) warning(?:s)? found""".r
     val PcompletionLine = """\[(\w+)\] Total time: (.+), completed (.+)""".r
     val PdoneUpdating = """\[info\] Done updating.""".r
     val Pexception_firstLine = """(.+: .+)""".r
@@ -33,6 +36,7 @@ object SBTEventParser extends (Stream[String]⇒Stream[SBTEvent]) {
   import Patterns._
 
   private def defaultState(in:Stream[String]):Stream[SBTEvent] = in match {
+    case Pcompiling(number, language, targetDirectory) #:: in2 ⇒ compilingState(in2, number, language, targetDirectory)
     case PcompletionLine(status, duration, completionTime) #:: in2 ⇒ CompletionLine(status, duration, completionTime) #:: defaultState(in2)
     case PdoneUpdating() #:: in2 ⇒ DoneUpdating #:: defaultState(in2)
     case PloadingPluginsFrom(pluginPath) #:: in2 ⇒ LoadingPlugins(pluginPath) #:: defaultState(in2)
@@ -44,6 +48,28 @@ object SBTEventParser extends (Stream[String]⇒Stream[SBTEvent]) {
     case Pupdating(pathDesc) #:: in2 ⇒ Updating(pathDesc) #:: defaultState(in2)
     case line #:: in2 ⇒ UnrecognizedEvent(line) #:: defaultState(in2)
     case Stream.Empty ⇒ Stream.Empty
+  }
+
+  private def compilingState(
+    in:Stream[String], numberOfSourceFiles:String, sourceLanguage:String, targetDirectory:String,
+    _featureWarnings:Option[String]=None, _numberOfWarnings:Option[String]=None
+  ):Stream[SBTEvent] = {
+    def recurse(
+      in2:Stream[String],
+      featureWarnings:Option[String]=_featureWarnings, numberOfWarnings:Option[String]=_numberOfWarnings):Stream[SBTEvent] =
+      compilingState(in2, numberOfSourceFiles, sourceLanguage, targetDirectory, featureWarnings, numberOfWarnings)
+
+    in match {
+      case Pcompiling_featureWarnings(number) #:: in2 ⇒ recurse(in2, featureWarnings=Some(number))
+      case Pcompiling_warningsFound(number) #:: in2 ⇒ recurse(in2, numberOfWarnings=Some(number))
+      case _ ⇒ Compiling(
+        sourceFileCount = parseNumber(numberOfSourceFiles),
+        sourceLanguage = sourceLanguage,
+        targetDirectory = targetDirectory,
+        warningsCount = _numberOfWarnings map parseNumber getOrElse 0,
+        featureWarningsCount = _featureWarnings map parseNumber getOrElse 0
+      ) #:: defaultState(in)
+    }
   }
 
   private def resolvingState(dependency:String, in:Stream[String]):Stream[SBTEvent] = {
@@ -95,5 +121,10 @@ object SBTEventParser extends (Stream[String]⇒Stream[SBTEvent]) {
       case Pexception_firstLine(fst) #:: in2 ⇒ extractAtLinesSubState(in2, Seq(fst))
       case _ ⇒ (Seq(), in)
     }
+  }
+
+  private def parseNumber(number:String):Int = number match {
+    case "one" ⇒ 1
+    case _ ⇒ number.trim toInt
   }
 }

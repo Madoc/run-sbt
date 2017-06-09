@@ -5,13 +5,12 @@ import java.io.File
 import com.github.madoc.runsbt.config.ExecutableConfig.CommandLineExecutableConfig
 import com.github.madoc.runsbt.config.SBTConfig
 import com.github.madoc.runsbt.events.SBTEventParser
-import com.github.madoc.runsbt.running.SBTCommand.CompileCommand
+import com.github.madoc.runsbt.running.SBTCommand.{CleanCommand, CompileCommand}
 
 object TestMe extends App {
   def runOnce() {
     val runSBT = RunSBT(SBTConfig(CommandLineExecutableConfig("/Users/madoc/bin/sbt")))
-    val proc = runSBT(new File("/Users/madoc/tmp/testprj"), CompileCommand)
-    //proc.outputLines foreach println
+    val proc = runSBT(new File("/Users/madoc/code/own/business-name-inspiration"), CleanCommand :+ CompileCommand)
     SBTEventParser(proc outputLines) foreach println
   }
 
