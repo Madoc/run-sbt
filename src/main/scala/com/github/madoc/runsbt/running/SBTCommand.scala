@@ -21,5 +21,6 @@ object SBTCommand {
   object CleanCommand extends SBTCommand {override def toStringSeq = Seq("clean")}
   object CompileCommand extends SBTCommand {def toStringSeq = Seq("compile")}
   object PublishLocalCommand extends SBTCommand {def toStringSeq = Seq("publish-local")}
+  object RunCommand extends SBTCommand {def toStringSeq = Seq("run")}
   object TestCommand extends SBTCommand {def toStringSeq = Seq("test")}
 }

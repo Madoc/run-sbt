@@ -4,7 +4,7 @@ import com.github.madoc.runsbt.events.SBTEvent._
 
 object SBTEventParser extends (Stream[String]⇒Stream[SBTEvent]) {
   def apply(in:Stream[String]):Stream[SBTEvent] =
-    SBTTestSuiteExtractor(defaultState(in filterNot ignoredLine map cleanUpLine))
+    SBTRunExtractor(SBTTestSuiteExtractor(defaultState(in filterNot ignoredLine map cleanUpLine)))
 
   private val justColons = """^\[\w+\]\s*:+\s*$""".r.pattern
   private val justLogLevel = """^\[\w+\]\s*$""".r.pattern
@@ -17,6 +17,9 @@ object SBTEventParser extends (Stream[String]⇒Stream[SBTEvent]) {
 
   private object Patterns {
     val Pcompiling = """\[info\] Compiling (.+) (.+) source(?:s)? to (.+)...""".r
+    val Pcompiling_compileWarning = """\[warn\]\s([^:]*):(\d+): (.*)""".r
+    val Pcompiling_compileWarning_codeExcerpt = """\[warn\] (.*)""".r
+    val Pcompiling_compileWarning_codeExcerpt_pointer = """\[warn\]\s(\s*)\^\s*""".r
     val Pcompiling_featureWarnings = """\[warn\] there (?:were|was) (.*) feature warning(?:s)?; re-run with -feature for details""".r
     val Pcompiling_warningsFound = """\[warn\] (.*) warning(?:s)? found""".r
     val PcompletionLine = """\[(\w+)\] Total time: (.+), completed (.+)""".r
@@ -70,14 +73,26 @@ object SBTEventParser extends (Stream[String]⇒Stream[SBTEvent]) {
 
   private def compilingState(
     in:Stream[String], numberOfSourceFiles:String, sourceLanguage:String, targetDirectory:String,
-    _featureWarnings:Option[String]=None, _numberOfWarnings:Option[String]=None
+    _featureWarnings:Option[String]=None, _numberOfWarnings:Option[String]=None, _warnings:Seq[CompileWarning]=Seq()
   ):Stream[SBTEvent] = {
     def recurse(
       in2:Stream[String],
-      featureWarnings:Option[String]=_featureWarnings, numberOfWarnings:Option[String]=_numberOfWarnings):Stream[SBTEvent] =
-      compilingState(in2, numberOfSourceFiles, sourceLanguage, targetDirectory, featureWarnings, numberOfWarnings)
+      featureWarnings:Option[String]=_featureWarnings, numberOfWarnings:Option[String]=_numberOfWarnings,
+      warnings:Seq[CompileWarning]=_warnings):Stream[SBTEvent] =
+
+      compilingState(in2, numberOfSourceFiles, sourceLanguage, targetDirectory, featureWarnings, numberOfWarnings,
+        warnings)
 
     in match {
+      case Pcompiling_compileWarning(sourceFile, line, message) #:: in2 ⇒ in2 match {
+        case Pcompiling_compileWarning_codeExcerpt(codeExcerpt) #:: in3 ⇒ in3 match {
+          case Pcompiling_compileWarning_codeExcerpt_pointer(spaces) #:: in4 ⇒
+            recurse(in4, warnings = _warnings :+ CompileWarning(sourceFile, line toInt, Some(codeExcerpt), Some(spaces.length+1)))
+          case _ ⇒
+            recurse(in3, warnings = _warnings :+ CompileWarning(sourceFile, line toInt, Some(codeExcerpt), None))
+        }
+        case _ ⇒ recurse(in2, warnings = _warnings :+ CompileWarning(sourceFile, line toInt, None, None))
+      }
       case Pcompiling_featureWarnings(number) #:: in2 ⇒ recurse(in2, featureWarnings=Some(number))
       case Pcompiling_warningsFound(number) #:: in2 ⇒ recurse(in2, numberOfWarnings=Some(number))
       case _ ⇒ Compiling(
@@ -85,7 +100,8 @@ object SBTEventParser extends (Stream[String]⇒Stream[SBTEvent]) {
         sourceLanguage = sourceLanguage,
         targetDirectory = targetDirectory,
         warningsCount = _numberOfWarnings map parseNumber getOrElse 0,
-        featureWarningsCount = _featureWarnings map parseNumber getOrElse 0
+        featureWarningsCount = _featureWarnings map parseNumber getOrElse 0,
+        warnings = _warnings
       ) #:: defaultState(in)
     }
   }
@@ -190,6 +206,8 @@ object SBTEventParser extends (Stream[String]⇒Stream[SBTEvent]) {
 
   private def parseNumber(number:String):Int = number match {
     case "one" ⇒ 1
+    case "two" ⇒ 2
+    case "three" ⇒ 3
     case _ ⇒ number.trim toInt
   }
 }
