@@ -38,6 +38,8 @@ object SBTEventParser extends (Stream[String]⇒Stream[SBTEvent]) {
     val Ppackaging_featureWarnings = """\[warn\] there (?:were|was) (.*) feature warning(?:s)?; re-run with -feature for details""".r
     val Ppackaging_noMainClassDetected = """\[warn\]\s+No main class detected""".r
     val Ppackaging_published = """\[info\]\s+published (.*) to (.*)""".r
+    val Ppackaging_warning_overwrite = """\[warn\] (Attempting to overwrite .*)""".r
+    val Ppackaging_warning_overwrite_deprecation = """\[warn\]\s*(This usage is deprecated and will be removed in sbt .*\.)""".r
     val Ppackaging_warningsFound = """\[warn\] (.*) warning(?:s)? found""".r
     val Ppackaging_wrote = """\[info\] Wrote (.*)""".r
     val Presolving = """\[info\] Resolving (.*) ...""".r
@@ -110,18 +112,21 @@ object SBTEventParser extends (Stream[String]⇒Stream[SBTEvent]) {
     _writtenPaths:Seq[String]=Seq(), _moduleDeliveries:Seq[ModuleDeliverySpec]=Seq(),
     _deliveredIvyPaths:Seq[String]=Seq(), _featureWarningCount:Option[String]=None,
     _documentableTemplateCount:Option[String]=None, _warningCount:Option[String]=None,
-    _publishings:Seq[ModuleDeliveryPublishing]=Seq(), _missingMainClass:Boolean=false):Stream[SBTEvent] = {
+    _publishings:Seq[ModuleDeliveryPublishing]=Seq(), _missingMainClass:Boolean=false,
+    _warnings:Seq[PackagingWarning]=Seq()):Stream[SBTEvent] = {
 
     def recurse(in2:Stream[String], packagePaths:Seq[String]=_packagePaths, scalaAPIPaths:Seq[String]=_scalaAPIPaths,
       writtenPaths:Seq[String]=_writtenPaths, moduleDeliveries:Seq[ModuleDeliverySpec]=_moduleDeliveries,
       deliveredIvyPaths:Seq[String]=_deliveredIvyPaths, featureWarningCount:Option[String]=_featureWarningCount,
       documentableTemplateCount:Option[String]=_documentableTemplateCount, warningCount:Option[String]=_warningCount,
-      publishings:Seq[ModuleDeliveryPublishing]=_publishings, missingMainClass:Boolean=_missingMainClass):Stream[SBTEvent] =
+      publishings:Seq[ModuleDeliveryPublishing]=_publishings, missingMainClass:Boolean=_missingMainClass,
+      warnings:Seq[PackagingWarning]=_warnings):Stream[SBTEvent] =
 
       packagingState(in2, _packagePaths=packagePaths, _scalaAPIPaths=scalaAPIPaths, _writtenPaths=writtenPaths,
         _moduleDeliveries=moduleDeliveries, _deliveredIvyPaths=deliveredIvyPaths,
         _featureWarningCount=featureWarningCount, _documentableTemplateCount=documentableTemplateCount,
-        _warningCount=warningCount, _publishings=publishings, _missingMainClass=missingMainClass)
+        _warningCount=warningCount, _publishings=publishings, _missingMainClass=missingMainClass,
+        _warnings=warnings)
 
     in match {
       case Ppackaging(path) #:: in2 ⇒ recurse(in2, packagePaths = _packagePaths :+ path)
@@ -134,6 +139,12 @@ object SBTEventParser extends (Stream[String]⇒Stream[SBTEvent]) {
       case Ppackaging_deliveringIvyFile(ivyPath) #:: in2 ⇒ recurse(in2, _deliveredIvyPaths :+ ivyPath)
       case Ppackaging_featureWarnings(num) #:: in2 ⇒ recurse(in2, featureWarningCount=Some(num))
       case Ppackaging_documentableTemplates(num) #:: in2 ⇒ recurse(in2, documentableTemplateCount=Some(num))
+      case Ppackaging_warning_overwrite(msg1) #:: in2 ⇒ in2 match {
+        case Ppackaging_warning_overwrite_deprecation(msg2) #:: in3 ⇒
+          recurse(in3, warnings = _warnings :+ PackagingWarning(Seq(msg1, msg2)))
+        case _ ⇒
+          recurse(in2, warnings = _warnings :+ PackagingWarning(Seq(msg1)))
+      }
       case Ppackaging_warningsFound(num) #:: in2 ⇒ recurse(in2, warningCount=Some(num))
       case Ppackaging_documentationSuccessful() #:: in2 ⇒ recurse(in2)
       case Ppackaging_published(what, where) #:: in2 ⇒ recurse(in2, publishings = _publishings:+ModuleDeliveryPublishing(what,where))
@@ -148,7 +159,8 @@ object SBTEventParser extends (Stream[String]⇒Stream[SBTEvent]) {
         featureWarningCount = _featureWarningCount map parseNumber getOrElse 0,
         warningCount = _warningCount map parseNumber getOrElse 0,
         documentableTemplateCount = _documentableTemplateCount map parseNumber getOrElse 0,
-        missingMainClass = _missingMainClass
+        missingMainClass = _missingMainClass,
+        warnings = _warnings
       ) #:: defaultState(in)
     }
   }

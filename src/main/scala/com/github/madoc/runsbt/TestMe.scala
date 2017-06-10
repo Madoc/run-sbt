@@ -10,7 +10,7 @@ import com.github.madoc.runsbt.running.SBTCommand._
 object TestMe extends App {
   def runOnce() {
     //val command = CleanCommand :+ CompileCommand :+ TestCommand :+ PublishLocalCommand
-    val command = CleanCommand :+ CompileCommand
+    val command = CleanCommand :+ PublishLocalCommand
     //val projectFolder = "/Users/madoc/code/own/business-name-inspiration"
     val projectFolder = "/Users/madoc/code/own/gtarpg/scenes"
     val runSBT = RunSBT(SBTConfig(CommandLineExecutableConfig("/Users/madoc/bin/sbt")))
