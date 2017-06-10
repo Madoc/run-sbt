@@ -87,11 +87,11 @@ object SBTEventParser extends (Stream[String]⇒Stream[SBTEvent]) {
       case Pcompiling_compileWarning(sourceFile, line, message) #:: in2 ⇒ in2 match {
         case Pcompiling_compileWarning_codeExcerpt(codeExcerpt) #:: in3 ⇒ in3 match {
           case Pcompiling_compileWarning_codeExcerpt_pointer(spaces) #:: in4 ⇒
-            recurse(in4, warnings = _warnings :+ CompileWarning(sourceFile, line toInt, Some(codeExcerpt), Some(spaces.length+1)))
+            recurse(in4, warnings = _warnings :+ CompileWarning(sourceFile, line toInt, message, Some(codeExcerpt), Some(spaces.length+1)))
           case _ ⇒
-            recurse(in3, warnings = _warnings :+ CompileWarning(sourceFile, line toInt, Some(codeExcerpt), None))
+            recurse(in3, warnings = _warnings :+ CompileWarning(sourceFile, line toInt, message, Some(codeExcerpt), None))
         }
-        case _ ⇒ recurse(in2, warnings = _warnings :+ CompileWarning(sourceFile, line toInt, None, None))
+        case _ ⇒ recurse(in2, warnings = _warnings :+ CompileWarning(sourceFile, line toInt, message, None, None))
       }
       case Pcompiling_featureWarnings(number) #:: in2 ⇒ recurse(in2, featureWarnings=Some(number))
       case Pcompiling_warningsFound(number) #:: in2 ⇒ recurse(in2, numberOfWarnings=Some(number))

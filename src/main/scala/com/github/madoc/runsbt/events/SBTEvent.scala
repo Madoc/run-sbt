@@ -34,7 +34,7 @@ object SBTEvent {
   }
   sealed case class Updating(pathDescription:String) extends SBTEvent
 
-  case class CompileWarning(sourceFile:String, lineNumber:Int, codeExcerpt:Option[String], column:Option[Int])
+  case class CompileWarning(sourceFile:String, lineNumber:Int, message:String, codeExcerpt:Option[String], column:Option[Int])
   case class ModuleDeliveryPublishing(what:String, targetPath:String)
   case class ModuleDeliverySpec(module:String, version:String, context:String, timestamp:String)
   case class ModuleNotFound_Tried(scope:String, uris:Seq[String])
