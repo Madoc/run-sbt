@@ -108,25 +108,25 @@ object SBTEventParser extends (Stream[String]⇒Stream[SBTEvent]) {
     }
   }
 
-  private def packagingState(in:Stream[String], _packagePaths:Seq[String], _scalaAPIPaths:Seq[String]=Seq(),
+  private def packagingState(in:Stream[String], _packagePaths:Seq[String]=Seq(), _scalaAPIPaths:Seq[String]=Seq(),
     _writtenPaths:Seq[String]=Seq(), _moduleDeliveries:Seq[ModuleDeliverySpec]=Seq(),
     _deliveredIvyPaths:Seq[String]=Seq(), _featureWarningCount:Option[String]=None,
     _documentableTemplateCount:Option[String]=None, _warningCount:Option[String]=None,
     _publishings:Seq[ModuleDeliveryPublishing]=Seq(), _missingMainClass:Boolean=false,
-    _warnings:Seq[PackagingWarning]=Seq()):Stream[SBTEvent] = {
+    _warnings:Seq[PackagingWarning]=Seq(), _staggeredLines:Seq[String]=Seq()):Stream[SBTEvent] = {
 
     def recurse(in2:Stream[String], packagePaths:Seq[String]=_packagePaths, scalaAPIPaths:Seq[String]=_scalaAPIPaths,
       writtenPaths:Seq[String]=_writtenPaths, moduleDeliveries:Seq[ModuleDeliverySpec]=_moduleDeliveries,
       deliveredIvyPaths:Seq[String]=_deliveredIvyPaths, featureWarningCount:Option[String]=_featureWarningCount,
       documentableTemplateCount:Option[String]=_documentableTemplateCount, warningCount:Option[String]=_warningCount,
       publishings:Seq[ModuleDeliveryPublishing]=_publishings, missingMainClass:Boolean=_missingMainClass,
-      warnings:Seq[PackagingWarning]=_warnings):Stream[SBTEvent] =
+      warnings:Seq[PackagingWarning]=_warnings, staggeredLines:Seq[String]=_staggeredLines):Stream[SBTEvent] =
 
       packagingState(in2, _packagePaths=packagePaths, _scalaAPIPaths=scalaAPIPaths, _writtenPaths=writtenPaths,
         _moduleDeliveries=moduleDeliveries, _deliveredIvyPaths=deliveredIvyPaths,
         _featureWarningCount=featureWarningCount, _documentableTemplateCount=documentableTemplateCount,
         _warningCount=warningCount, _publishings=publishings, _missingMainClass=missingMainClass,
-        _warnings=warnings)
+        _warnings=warnings, _staggeredLines=staggeredLines)
 
     in match {
       case Ppackaging(path) #:: in2 ⇒ recurse(in2, packagePaths = _packagePaths :+ path)
@@ -149,6 +149,10 @@ object SBTEventParser extends (Stream[String]⇒Stream[SBTEvent]) {
       case Ppackaging_documentationSuccessful() #:: in2 ⇒ recurse(in2)
       case Ppackaging_published(what, where) #:: in2 ⇒ recurse(in2, publishings = _publishings:+ModuleDeliveryPublishing(what,where))
       case Ppackaging_noMainClassDetected() #:: in2 ⇒ recurse(in2, missingMainClass = true)
+
+      case (Presolving(_*) | Presolving_moduleNotFound(_*) | Presolving_moduleNotFound_tried(_*) | PdoneUpdating(_*)) #:: in2 ⇒
+        recurse(in2, staggeredLines = _staggeredLines :+ in.head)
+
       case _ ⇒ Packaging(
         packagePaths = _packagePaths,
         writtenPaths = _writtenPaths,
@@ -161,7 +165,7 @@ object SBTEventParser extends (Stream[String]⇒Stream[SBTEvent]) {
         documentableTemplateCount = _documentableTemplateCount map parseNumber getOrElse 0,
         missingMainClass = _missingMainClass,
         warnings = _warnings
-      ) #:: defaultState(in)
+      ) #:: defaultState(_staggeredLines.toStream ++ in)
     }
   }
 
