@@ -4,7 +4,9 @@ sealed trait SBTEvent {
   def isError:Boolean = false
 }
 object SBTEvent {
-  sealed case class Compiling(sourceFileCount:Int, sourceLanguage:String, targetDirectory:String, warningsCount:Int, featureWarningsCount:Int, warnings:Seq[CompileWarning]) extends SBTEvent
+  sealed case class Compiling(sourceFileCount:Int, sourceLanguage:String, targetDirectory:String,
+    scalaAPIPaths:Seq[String], warningsCount:Int, featureWarningsCount:Int, warnings:Seq[CompileWarning],
+    documentableTemplateCount:Int) extends SBTEvent
   sealed case class CompletionLine(status:String, duration:String, completionTime:String) extends SBTEvent {
     override def isError = status == "error"
   }

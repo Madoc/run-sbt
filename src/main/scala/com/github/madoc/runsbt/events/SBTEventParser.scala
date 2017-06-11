@@ -18,8 +18,10 @@ object SBTEventParser extends (Stream[String]⇒Stream[SBTEvent]) {
   private object Patterns {
     val Pcompiling = """\[info\] Compiling (.+) (.+) source(?:s)? to (.+)...""".r
     val Pcompiling_compileWarning = """\[warn\]\s([^:]*):(\d+): (.*)""".r
+    lazy val Pcompiling_apiDocs = Ppackaging_apiDocs
     val Pcompiling_compileWarning_codeExcerpt = """\[warn\] (.*)""".r
     val Pcompiling_compileWarning_codeExcerpt_pointer = """\[warn\]\s(\s*)\^\s*""".r
+    lazy val Pcompiling_documentableTemplates = Ppackaging_documentableTemplates
     val Pcompiling_featureWarnings = """\[warn\] there (?:were|was) (.*) feature warning(?:s)?; re-run with -feature for details""".r
     val Pcompiling_warningsFound = """\[warn\] (.*) warning(?:s)? found""".r
     val PcompletionLine = """\[(\w+)\] Total time: (.+), completed (.+)""".r
@@ -29,11 +31,11 @@ object SBTEventParser extends (Stream[String]⇒Stream[SBTEvent]) {
     val PloadingPluginsFrom = """\[info\] Loading global plugins from (.*)""".r
     val PloadingProjectDefinition = """\[info\] Loading project definition from (.*)""".r
     val Ppackaging = """\[info\] Packaging (.*) ...""".r
-    val Ppackaging_apiDocs = """\[info\] Main Scala API documentation to (.*)...""".r
+    lazy val Ppackaging_apiDocs = """\[info\] Main Scala API documentation to (.*)...""".r
     val Ppackaging_delivering = """\[info\] :: delivering :: (.*) :: (.*) :: (.*) :: (.*)""".r
     val Ppackaging_deliveringIvyFile = """\[info\]\s+delivering ivy file to (.*)""".r
     val Ppackaging_donePackaging = """\[info\] Done packaging.""".r
-    val Ppackaging_documentableTemplates = """model contains (.*) documentable template(?:s)?""".r
+    lazy val Ppackaging_documentableTemplates = """model contains (.*) documentable template(?:s)?""".r
     val Ppackaging_documentationSuccessful = """\[info\] Main Scala API documentation successful.""".r
     val Ppackaging_featureWarnings = """\[warn\] there (?:were|was) (.*) feature warning(?:s)?; re-run with -feature for details""".r
     val Ppackaging_noMainClassDetected = """\[warn\]\s+No main class detected""".r
@@ -75,17 +77,20 @@ object SBTEventParser extends (Stream[String]⇒Stream[SBTEvent]) {
 
   private def compilingState(
     in:Stream[String], numberOfSourceFiles:String, sourceLanguage:String, targetDirectory:String,
-    _featureWarnings:Option[String]=None, _numberOfWarnings:Option[String]=None, _warnings:Seq[CompileWarning]=Seq()
+    _featureWarnings:Option[String]=None, _numberOfWarnings:Option[String]=None, _warnings:Seq[CompileWarning]=Seq(),
+    _scalaAPIPaths:Seq[String]=Seq(), _documentableTemplateCount:Option[String]=None
   ):Stream[SBTEvent] = {
     def recurse(
       in2:Stream[String],
       featureWarnings:Option[String]=_featureWarnings, numberOfWarnings:Option[String]=_numberOfWarnings,
-      warnings:Seq[CompileWarning]=_warnings):Stream[SBTEvent] =
+      warnings:Seq[CompileWarning]=_warnings, scalaAPIPaths:Seq[String]=_scalaAPIPaths,
+      documentableTemplateCount:Option[String]=_documentableTemplateCount):Stream[SBTEvent] =
 
       compilingState(in2, numberOfSourceFiles, sourceLanguage, targetDirectory, featureWarnings, numberOfWarnings,
-        warnings)
+        warnings, scalaAPIPaths, documentableTemplateCount)
 
     in match {
+      case Pcompiling_apiDocs(path:String) #:: in2 ⇒ recurse(in2, scalaAPIPaths = _scalaAPIPaths :+ path)
       case Pcompiling_compileWarning(sourceFile, line, message) #:: in2 ⇒ in2 match {
         case Pcompiling_compileWarning_codeExcerpt(codeExcerpt) #:: in3 ⇒ in3 match {
           case Pcompiling_compileWarning_codeExcerpt_pointer(spaces) #:: in4 ⇒
@@ -95,15 +100,18 @@ object SBTEventParser extends (Stream[String]⇒Stream[SBTEvent]) {
         }
         case _ ⇒ recurse(in2, warnings = _warnings :+ CompileWarning(sourceFile, line toInt, message, None, None))
       }
+      case Pcompiling_documentableTemplates(number) #:: in2 ⇒ recurse(in2, documentableTemplateCount=Some(number))
       case Pcompiling_featureWarnings(number) #:: in2 ⇒ recurse(in2, featureWarnings=Some(number))
       case Pcompiling_warningsFound(number) #:: in2 ⇒ recurse(in2, numberOfWarnings=Some(number))
       case _ ⇒ Compiling(
         sourceFileCount = parseNumber(numberOfSourceFiles),
         sourceLanguage = sourceLanguage,
         targetDirectory = targetDirectory,
+        scalaAPIPaths = _scalaAPIPaths,
         warningsCount = _numberOfWarnings map parseNumber getOrElse 0,
         featureWarningsCount = _featureWarnings map parseNumber getOrElse 0,
-        warnings = _warnings
+        warnings = _warnings,
+        documentableTemplateCount = _documentableTemplateCount map parseNumber getOrElse 0
       ) #:: defaultState(in)
     }
   }
