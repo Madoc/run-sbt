@@ -30,6 +30,9 @@ object SBTEventParser extends (Stream[String]⇒Stream[SBTEvent]) {
     val Pexception_nextLines = """\s+(at .+)""".r
     val PloadingPluginsFrom = """\[info\] Loading global plugins from (.*)""".r
     val PloadingProjectDefinition = """\[info\] Loading project definition from (.*)""".r
+    val PnotAnSBTProject = """(.*) doesn't appear to be an sbt project\.""".r
+    val PnotAnSBTProject_ignore1 = """If you want to start sbt anyway, run:""".r
+    val PnotAnSBTProject_ignore2 = """.* -sbt-create""".r
     val Ppackaging = """\[info\] Packaging (.*) ...""".r
     lazy val Ppackaging_apiDocs = """\[info\] Main Scala API documentation to (.*)...""".r
     val Ppackaging_delivering = """\[info\] :: delivering :: (.*) :: (.*) :: (.*) :: (.*)""".r
@@ -65,6 +68,7 @@ object SBTEventParser extends (Stream[String]⇒Stream[SBTEvent]) {
     case PdoneUpdating() #:: in2 ⇒ DoneUpdating #:: defaultState(in2)
     case PloadingPluginsFrom(pluginPath) #:: in2 ⇒ LoadingPlugins(pluginPath) #:: defaultState(in2)
     case PloadingProjectDefinition(path) #:: in2 ⇒ LoadingProjectDefinition(path) #:: defaultState(in2)
+    case PnotAnSBTProject(path) #:: in2 ⇒ notAnSBTProjectState(in2, path)
     case Ppackaging(packagePath) #:: in2 ⇒ packagingState(in2, Seq(packagePath))
     case Presolving(dependency) #:: in2 ⇒ resolvingState(dependency, in2)
     case PsetProject(projectName, buildPath) #:: in2 ⇒ SetProject(projectName, buildPath) #:: defaultState(in2)
@@ -114,6 +118,17 @@ object SBTEventParser extends (Stream[String]⇒Stream[SBTEvent]) {
         documentableTemplateCount = _documentableTemplateCount map parseNumber getOrElse 0
       ) #:: defaultState(in)
     }
+  }
+
+  private def notAnSBTProjectState(in:Stream[String], projectPath:String):Stream[SBTEvent] = {
+    val in2 = in match {
+      case PnotAnSBTProject_ignore1(_*) #:: _in2 ⇒ _in2 match {
+        case PnotAnSBTProject_ignore2(_*) #:: _in3 ⇒ _in3
+        case _ ⇒ _in2
+      }
+      case _ ⇒ in
+    }
+    NotAnSBTProject(projectPath) #:: defaultState(in2)
   }
 
   private def packagingState(in:Stream[String], _packagePaths:Seq[String]=Seq(), _scalaAPIPaths:Seq[String]=Seq(),

@@ -16,6 +16,9 @@ object SBTEvent {
   sealed case class ModuleNotFound(module:String, tried:Seq[ModuleNotFound_Tried]) extends SBTEvent {
     override def isError = true
   }
+  sealed case class NotAnSBTProject(projectPath:String) extends SBTEvent {
+    override def isError = true
+  }
   sealed case class Packaging(packagePaths:Seq[String], writtenPaths:Seq[String], scalaAPIPaths:Seq[String],
     moduleDeliveries:Seq[ModuleDeliverySpec], publishings:Seq[ModuleDeliveryPublishing], deliveryIvyPaths:Seq[String],
     featureWarningCount:Int, warningCount:Int, documentableTemplateCount:Int, missingMainClass:Boolean,
