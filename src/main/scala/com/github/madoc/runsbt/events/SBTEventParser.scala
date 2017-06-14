@@ -2,6 +2,7 @@ package com.github.madoc.runsbt.events
 
 import com.github.madoc.runsbt.events.SBTEvent._
 
+// TODO make parse methods final to allow for tail recursion
 object SBTEventParser extends (Stream[String]⇒Stream[SBTEvent]) {
   def apply(in:Stream[String]):Stream[SBTEvent] =
     SBTRunExtractor(SBTTestSuiteExtractor(defaultState(in filterNot ignoredLine map cleanUpLine)))
