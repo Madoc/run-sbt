@@ -2,10 +2,13 @@ package com.github.madoc.runsbt.running
 
 import java.util.concurrent.{BlockingQueue, LinkedBlockingQueue}
 
+import com.github.madoc.runsbt.events.{SBTEvent, SBTEventParser}
+
 import scala.sys.process._
 
 trait SBTProcess {
   def cancel()
+  lazy val events:Stream[SBTEvent] = SBTEventParser(outputLines)
   def exitValue:Int
   def outputLines:Stream[String]
 }
