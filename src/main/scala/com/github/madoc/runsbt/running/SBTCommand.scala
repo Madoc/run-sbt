@@ -23,4 +23,5 @@ object SBTCommand {
   object PublishLocalCommand extends SBTCommand {def toStringSeq = Seq("publish-local")}
   object RunCommand extends SBTCommand {def toStringSeq = Seq("run")}
   object TestCommand extends SBTCommand {def toStringSeq = Seq("test")}
+  object UpdateCommand extends SBTCommand {def toStringSeq = Seq("update")}
 }
