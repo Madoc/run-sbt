@@ -18,7 +18,7 @@ object RunSBT {
     def apply(workingDirectory:File, command:SBTCommand):SBTProcess = sbtConfig sbtExecutable match {
       case CommandLineExecutableConfig(executablePath) ⇒
         val processBuilder = Process(Seq(executablePath) ++ (command toStringSeq), Some(workingDirectory))
-        SBTProcess.BasedOnProcessBuilder(processBuilder)
+        SBTProcess.BasedOnProcessBuilder(processBuilder, workingDirectory, command)
     }
   }
 }

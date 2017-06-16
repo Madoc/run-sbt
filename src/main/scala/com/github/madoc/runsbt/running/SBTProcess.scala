@@ -1,5 +1,6 @@
 package com.github.madoc.runsbt.running
 
+import java.io.File
 import java.util.concurrent.{BlockingQueue, LinkedBlockingQueue}
 
 import com.github.madoc.runsbt.events.{SBTEvent, SBTEventParser}
@@ -13,7 +14,7 @@ trait SBTProcess {
   def outputLines:Stream[String]
 }
 object SBTProcess {
-  case class BasedOnProcessBuilder(builder:ProcessBuilder) extends SBTProcess {
+  case class BasedOnProcessBuilder(builder:ProcessBuilder, workingDirectory:File, command:SBTCommand) extends SBTProcess {
     def exitValue = process exitValue
     def cancel() {process destroy(); buffer put EOS}
     lazy val outputLines:Stream[String] = nextLogLine()
@@ -35,5 +36,7 @@ object SBTProcess {
     locally {new Thread() {
       override def run() {process.exitValue(); buffer put EOS}
     }.start()}
+
+    override def toString:String = s"SBTProcess(directory=$workingDirectory, command=$command, process=$builder)"
   }
 }
