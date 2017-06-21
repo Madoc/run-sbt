@@ -24,4 +24,9 @@ object SBTCommand {
   object RunCommand extends SBTCommand {def toStringSeq = Seq("run")}
   object TestCommand extends SBTCommand {def toStringSeq = Seq("test")}
   object UpdateCommand extends SBTCommand {def toStringSeq = Seq("update")}
+
+  val statics:Set[SBTCommand] = Set(CleanCommand, CompileCommand, PublishLocalCommand, RunCommand, TestCommand, UpdateCommand)
+  val staticsByName:Map[String,SBTCommand] = statics map {s ⇒ ((s toStringSeq) mkString " ", s)} toMap
+  def apply(text:String):SBTCommand = staticsByName getOrElse (text, FreeFormCommand(text))
+
 }
