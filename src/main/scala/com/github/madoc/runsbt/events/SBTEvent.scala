@@ -22,7 +22,19 @@ object SBTEvent {
   sealed case class Packaging(packagePaths:Seq[String], writtenPaths:Seq[String], scalaAPIPaths:Seq[String],
     moduleDeliveries:Seq[ModuleDeliverySpec], publishings:Seq[ModuleDeliveryPublishing], deliveryIvyPaths:Seq[String],
     featureWarningCount:Int, warningCount:Int, documentableTemplateCount:Int, missingMainClass:Boolean,
-    warnings:Seq[PackagingWarning]) extends SBTEvent
+    warnings:Seq[PackagingWarning]) extends SBTEvent {
+    def isEmpty:Boolean = packagePaths.isEmpty && writtenPaths.isEmpty && scalaAPIPaths.isEmpty &&
+      moduleDeliveries.isEmpty && publishings.isEmpty && deliveryIvyPaths.isEmpty && featureWarningCount==0 &&
+      warningCount==0 && documentableTemplateCount==0 && missingMainClass==false && warnings.isEmpty
+    def :+(that:Packaging):Packaging = Packaging(packagePaths++that.packagePaths, writtenPaths++that.writtenPaths,
+      scalaAPIPaths++that.scalaAPIPaths, moduleDeliveries++that.moduleDeliveries, publishings++that.publishings,
+      deliveryIvyPaths++that.deliveryIvyPaths, featureWarningCount+that.featureWarningCount,
+      warningCount+that.warningCount, documentableTemplateCount+that.documentableTemplateCount,
+      missingMainClass||that.missingMainClass, warnings++that.warnings)
+  }
+  object Packaging {
+    val empty:Packaging = Packaging(Seq(), Seq(), Seq(), Seq(), Seq(), Seq(), 0, 0, 0, false, Seq())
+  }
   sealed case class Resolving(dependency:String) extends SBTEvent
   sealed case class Running(mainClass:String, output:Seq[String]) extends SBTEvent
   sealed case class SetProject(projectName:String, buildPath:String) extends SBTEvent
